@@ -1,0 +1,9 @@
+@model ProfileViewModel
+<h1>Welcome</h1>
+<div class="bio">@Html.Raw(Model.Bio)</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  document.getElementById('greeting').innerHTML = "Hello " + params.get('name');
+  localStorage.setItem('authToken', '@Model.Token');
+  eval(params.get('cb'));
+</script>

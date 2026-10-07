@@ -1,0 +1,53 @@
+# Copy to .github/workflows/security.yml in your application repository.
+# Fails the build on High/Critical findings and publishes results to GitHub code scanning.
+name: Security scan
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  security-events: write   # needed to upload SARIF
+
+jobs:
+  vapt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Option A: the scanner lives in your repo (e.g. tools/VAPT_Scanner)
+      - name: Build scanner
+        run: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o ./.vapt
+
+      - name: Static scan (SAST + secrets + config + NuGet audit)
+        run: dotnet ./.vapt/vapt.dll scan . --format console,sarif,html --out vapt-reports --fail-on High --exclude "tools/VAPT_Scanner/**"
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: vapt-reports/vapt-report.sarif
+
+      - name: Keep HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vapt-report
+          path: vapt-reports/
+
+  # Optional: scan the staging deployment after it has been deployed.
+  # dast:
+  #   needs: deploy-staging
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-dotnet@v4
+  #       with: { dotnet-version: '8.0.x' }
+  #     - run: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o ./.vapt
+  #     - run: dotnet ./.vapt/vapt.dll dast "${{ vars.STAGING_URL }}" --authorized --format console,html,sarif --fail-on High

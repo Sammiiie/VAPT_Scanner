@@ -1,0 +1,30 @@
+# Azure DevOps pipeline step. Install the "SARIF SAST Scans Tab" extension to see results in the build UI.
+trigger:
+  branches:
+    include: [ main ]
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: UseDotNet@2
+    inputs:
+      packageType: sdk
+      version: 8.0.x
+
+  - script: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o $(Agent.TempDirectory)/vapt
+    displayName: Build VAPT scanner
+
+  - script: >
+      dotnet $(Agent.TempDirectory)/vapt/vapt.dll scan $(Build.SourcesDirectory)
+      --format console,sarif,html
+      --out $(Build.ArtifactStagingDirectory)/CodeAnalysisLogs
+      --fail-on High
+      --exclude "tools/VAPT_Scanner/**"
+    displayName: Security scan (release gate)
+
+  - task: PublishBuildArtifacts@1
+    condition: always()
+    inputs:
+      PathtoPublish: $(Build.ArtifactStagingDirectory)/CodeAnalysisLogs
+      ArtifactName: CodeAnalysisLogs   # this name is what the SARIF tab looks for
