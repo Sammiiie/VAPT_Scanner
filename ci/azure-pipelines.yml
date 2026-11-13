@@ -12,15 +12,17 @@ steps:
       packageType: sdk
       version: 8.0.x
 
-  - script: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o $(Agent.TempDirectory)/vapt
-    displayName: Build VAPT scanner
+  # Installs the published tool from nuget.org. If the scanner source is vendored in your repo instead,
+  # build it with: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o $(Agent.TempDirectory)/vapt
+  # and call dotnet $(Agent.TempDirectory)/vapt/vapt.dll with --exclude "tools/VAPT_Scanner/**".
+  - script: dotnet tool install --tool-path $(Agent.TempDirectory)/vapt VaptScanner
+    displayName: Install VAPT scanner
 
   - script: >
-      dotnet $(Agent.TempDirectory)/vapt/vapt.dll scan $(Build.SourcesDirectory)
+      $(Agent.TempDirectory)/vapt/vapt scan $(Build.SourcesDirectory)
       --format console,sarif,html
       --out $(Build.ArtifactStagingDirectory)/CodeAnalysisLogs
       --fail-on High
-      --exclude "tools/VAPT_Scanner/**"
     displayName: Security scan (release gate)
 
   - task: PublishBuildArtifacts@1

@@ -1,5 +1,8 @@
 # VAPT Scanner for .NET
 
+[![NuGet](https://img.shields.io/nuget/v/VaptScanner.svg)](https://www.nuget.org/packages/VaptScanner)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A command-line security gate for .NET applications. Run it on your code before a release (locally or in CI) and it
 fails the build when it finds serious vulnerabilities, with a clear explanation and fix for each one.
 
@@ -17,10 +20,20 @@ No NuGet dependencies — it only needs the .NET 8 SDK or newer.
 
 ---
 
-## Quick start (Windows)
+## Install
+
+```bash
+dotnet tool install --global VaptScanner
+vapt scan path/to/YourApp
+```
+
+Update later with `dotnet tool update --global VaptScanner`.
+
+## Build from source
 
 ```powershell
-cd "C:\Users\DELL\Downloads\Dotnet Project\VAPT_Scanner"
+git clone https://github.com/Sammiiie/VAPT_Scanner.git
+cd VAPT_Scanner
 dotnet build -c Release
 
 # Scan a project or solution folder
@@ -42,7 +55,7 @@ dotnet src\VaptScanner\bin\Release\net8.0\vapt.dll scan samples\VulnerableApp   
 dotnet src\VaptScanner\bin\Release\net8.0\vapt.dll scan samples\SafeApp         # clean
 ```
 
-### Install as a `vapt` command (optional)
+### Install a locally built package (optional)
 
 ```powershell
 dotnet pack src\VaptScanner -c Release -o nupkg
@@ -153,3 +166,7 @@ ci/                       GitHub Actions and Azure DevOps templates
 Adding a rule: append an `R(...)` entry in `Analyzers/CodeRules.cs` with an ID, severity, CWE, OWASP category,
 a regex that finds the candidate, and an optional check that discards safe usages. Then add a positive case to
 `samples/VulnerableApp` and a negative case to `samples/SafeApp` and confirm both scans behave.
+
+## License
+
+[MIT](LICENSE)
