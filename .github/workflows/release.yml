@@ -1,0 +1,41 @@
+# Publishes the vapt dotnet tool to nuget.org when a version tag (e.g. v1.0.0) is pushed.
+# Requires the repository secret NUGET_API_KEY (nuget.org key with Push scope for VaptScanner).
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write   # create the GitHub Release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Test
+        run: dotnet test VaptScanner.sln -c Release
+
+      - name: Pack
+        run: dotnet pack src/VaptScanner -c Release -o nupkg -p:Version=${GITHUB_REF_NAME#v}
+
+      - name: Smoke test the packaged tool
+        run: |
+          dotnet tool install --tool-path ./t VaptScanner --add-source ./nupkg --version ${GITHUB_REF_NAME#v}
+          ./t/vapt rules > /dev/null
+          ./t/vapt scan samples/SafeApp --no-deps --format console
+
+      - name: Push to nuget.org
+        run: dotnet nuget push "nupkg/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nupkg/*.nupkg
+          generate_release_notes: true

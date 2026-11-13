@@ -21,12 +21,16 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # Option A: the scanner lives in your repo (e.g. tools/VAPT_Scanner)
-      - name: Build scanner
-        run: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o ./.vapt
+      # Option A (recommended): install the published tool from nuget.org
+      - name: Install scanner
+        run: dotnet tool install --global VaptScanner
 
       - name: Static scan (SAST + secrets + config + NuGet audit)
-        run: dotnet ./.vapt/vapt.dll scan . --format console,sarif,html --out vapt-reports --fail-on High --exclude "tools/VAPT_Scanner/**"
+        run: vapt scan . --format console,sarif,html --out vapt-reports --fail-on High
+
+      # Option B: the scanner source lives in your repo (e.g. tools/VAPT_Scanner) — replace the two steps above with:
+      # - run: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o ./.vapt
+      # - run: dotnet ./.vapt/vapt.dll scan . --format console,sarif,html --out vapt-reports --fail-on High --exclude "tools/VAPT_Scanner/**"
 
       - name: Upload SARIF to code scanning
         if: always()
@@ -49,5 +53,5 @@ jobs:
   #     - uses: actions/checkout@v4
   #     - uses: actions/setup-dotnet@v4
   #       with: { dotnet-version: '8.0.x' }
-  #     - run: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o ./.vapt
-  #     - run: dotnet ./.vapt/vapt.dll dast "${{ vars.STAGING_URL }}" --authorized --format console,html,sarif --fail-on High
+  #     - run: dotnet tool install --global VaptScanner
+  #     - run: vapt dast "${{ vars.STAGING_URL }}" --authorized --format console,html,sarif --fail-on High

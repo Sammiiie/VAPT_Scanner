@@ -17,9 +17,20 @@
     <ToolCommandName>vapt</ToolCommandName>
     <PackageId>VaptScanner</PackageId>
     <Description>Pre-production security scanner for .NET codebases: SAST rules, secret detection, config review, vulnerable NuGet audit and a safe DAST baseline scan.</Description>
+    <Authors>Samuel Ejiga</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Sammiiie/VAPT_Scanner</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Sammiiie/VAPT_Scanner</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>dotnet security sast owasp devsecops dast secrets sarif vapt</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <InvariantGlobalization>true</InvariantGlobalization>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>
