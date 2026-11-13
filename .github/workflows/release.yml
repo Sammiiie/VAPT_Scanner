@@ -19,6 +19,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Test
+        run: dotnet test VaptScanner.sln -c Release
+
       - name: Pack
         run: dotnet pack src/VaptScanner -c Release -o nupkg -p:Version=${GITHUB_REF_NAME#v}
 

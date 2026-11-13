@@ -1,5 +1,6 @@
 # VAPT Scanner for .NET
 
+[![CI](https://github.com/Sammiiie/VAPT_Scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/Sammiiie/VAPT_Scanner/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/VaptScanner.svg)](https://www.nuget.org/packages/VaptScanner)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -159,13 +160,37 @@ src/VaptScanner/
   Analyzers/              CodeRules (SAST), SecretsAnalyzer, ConfigAnalyzer, DependencyAnalyzer
   Dast/WebScanner.cs      Running-site baseline scanner
   Reporting/              Console, JSON, SARIF 2.1.0 and HTML reports
+tests/VaptScanner.Tests/  xUnit suite (see below)
 samples/                  VulnerableApp (deliberately insecure) and SafeApp (secure equivalents)
 ci/                       GitHub Actions and Azure DevOps templates
 ```
 
+## Tests
+
+```powershell
+dotnet test
+```
+
+The suite runs fully offline and covers:
+
+- **Sample apps (end to end):** `samples/VulnerableApp` must produce exactly the expected set of rule IDs, so a
+  missed detection and a new false positive both fail. `samples/SafeApp` must produce zero findings.
+- **Rules:** a vulnerable snippet and its secure equivalent for each major rule (SQL, command injection,
+  deserialization, crypto, path traversal, SSRF, XSS, TLS, secrets, config), plus commented-out code.
+- **Rule catalogue:** unique IDs, CWE and OWASP mapping for every rule, and `RULES.md` kept in sync.
+- **Gate behaviour:** inline `vapt-ignore`, baselines (stable fingerprints, new issues still reported),
+  disabled rules, severity overrides, excludes.
+- **CLI contract:** exit codes `0`/`1`/`2`, JSON and SARIF 2.1.0 output, and DAST refusing to run without
+  `--authorized`.
+
+CI runs the suite on Linux and Windows for every PR, and a release can't publish if any test fails.
+
 Adding a rule: append an `R(...)` entry in `Analyzers/CodeRules.cs` with an ID, severity, CWE, OWASP category,
-a regex that finds the candidate, and an optional check that discards safe usages. Then add a positive case to
-`samples/VulnerableApp` and a negative case to `samples/SafeApp` and confirm both scans behave.
+a regex that finds the candidate, and an optional check that discards safe usages. Then:
+
+1. Add a positive case to `samples/VulnerableApp` and a negative case to `samples/SafeApp`.
+2. Add the ID to `ExpectedVulnerableAppRules` in `tests/VaptScanner.Tests/SampleAppTests.cs`.
+3. Add a pair to `RuleTests`, regenerate `RULES.md` with `vapt rules --format md`, and run `dotnet test`.
 
 ## License
 
