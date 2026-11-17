@@ -4,8 +4,9 @@
 [![NuGet](https://img.shields.io/nuget/v/VaptScanner.svg)](https://www.nuget.org/packages/VaptScanner)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A command-line security gate for .NET applications. Run it on your code before a release (locally or in CI) and it
-fails the build when it finds serious vulnerabilities, with a clear explanation and fix for each one.
+A command-line security scanner for .NET applications. Run it on your code before a release (locally or in CI) and it
+reports every vulnerability it finds, with a clear explanation and fix for each one. By default it only reports and
+never breaks your build; add `--fail-build` when you want it to act as a release gate.
 
 | Module | What it checks |
 |---|---|
@@ -82,18 +83,36 @@ Common options:
 |---|---|---|
 | `--format` | `console,html` | Any of `console`, `html`, `json`, `sarif`, or `all` |
 | `--out <dir>` | `vapt-reports` | Where report files go |
-| `--fail-on <sev>` | `High` | Exit code 1 when any finding is at/above this. `None` never fails |
+| `--fail-build [sev]` | off (report only) | Fail the build (exit code 1) when any finding is at/above `sev`. With no severity it uses `High` |
+| `--fail-on <sev>` | `None` | Alias of `--fail-build <sev>` |
+| `--graph <file>` | | Also write an HTML5 chart report to this file (or `vapt-graph.html` inside it, if it is a folder) |
 | `--min-severity <sev>` | `Low` | Hide findings below this |
 | `--exclude <glob>` | | Skip paths, e.g. `"**/Migrations/**"` (repeatable) |
 | `--disable <RULE>` | | Turn a rule off (repeatable) |
 | `--no-deps` / `--offline` | | Skip the NuGet audit / use the built-in advisory list only |
 | `-v`, `--verbose` | | Print the explanation and fix for each finding in the console |
 
-**Exit codes:** `0` passed · `1` findings at/above `--fail-on` · `2` usage or runtime error.
+**Exit codes:** `0` passed or report only · `1` findings at/above `--fail-build` (only when it is set) · `2` usage or runtime error.
+
+```bash
+vapt scan .                                   # report only: lists findings, prints "N vulnerabilities found", exit 0
+vapt scan . --fail-build                      # fail on High or Critical
+vapt scan . --fail-build Medium               # fail on Medium and above
+vapt scan . --graph reports/security-graph.html   # also write the chart report to this path
+```
+
+### Graph report
+
+`--graph <file>` writes a single self-contained HTML5 page (no scripts, CDN or fonts, so it works offline and as a CI
+artifact). It shows totals per severity, a severity mix chart, findings by source (code, secrets, config,
+dependencies, DAST), the top categories and rules, and the files with the most findings. It is written alongside
+whatever `--format` produces and works for both `vapt scan` and `vapt dast`.
 
 ---
 
 ## Using it as a release gate
+
+Gating is opt-in: add `--fail-build` (or `"failOn": "High"` in `.vaptconfig.json`) so the scan fails the pipeline.
 
 1. **First run on an existing codebase:** fix what you can, then run `vapt baseline .` and commit
    `.vapt-baseline.json`. From then on the gate only fails on *new* issues, so you can pay down the rest over time.

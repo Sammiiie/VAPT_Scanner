@@ -52,8 +52,14 @@ public static class ConsoleReporter
         Console.WriteLine();
         if (blocking > 0)
             WriteColored($"✗ GATE FAILED: {blocking} finding(s) at or above {failOn}. Fix them or document accepted risk before releasing.\n", ConsoleColor.Red);
-        else if ((int)failOn <= (int)Severity.Critical)
+        else if (failOn.GateEnabled())
             WriteColored($"✓ GATE PASSED: nothing at or above {failOn}.\n", ConsoleColor.Green);
+        else if (result.Findings.Count > 0)
+            WriteColored($"⚠ {result.Findings.Count} vulnerabilit{(result.Findings.Count == 1 ? "y" : "ies")} found " +
+                         $"(Critical {counts[Severity.Critical]} · High {counts[Severity.High]} · Medium {counts[Severity.Medium]} · Low {counts[Severity.Low]} · Info {counts[Severity.Info]}). " +
+                         "Report only: the build is not blocked. Add --fail-build to fail CI.\n", ConsoleColor.Yellow);
+        else
+            WriteColored("✓ No vulnerabilities found.\n", ConsoleColor.Green);
     }
 
     private static ConsoleColor Color(Severity s) => s switch

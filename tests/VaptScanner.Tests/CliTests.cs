@@ -27,10 +27,10 @@ public class CliTests
     }
 
     [Fact]
-    public void Scan_VulnerableApp_ExitsWith1_AndWritesJsonAndSarif()
+    public void Scan_VulnerableApp_WithFailBuild_ExitsWith1_AndWritesJsonAndSarif()
     {
         var outDir = TestPaths.NewTempDir();
-        var code = Run("scan", TestPaths.VulnerableApp, "--offline", "--format", "json,sarif", "--out", outDir);
+        var code = Run("scan", TestPaths.VulnerableApp, "--offline", "--fail-build", "--format", "json,sarif", "--out", outDir);
 
         Assert.Equal(1, code);
 
@@ -53,6 +53,78 @@ public class CliTests
     public void Scan_SafeApp_ExitsWith0()
     {
         Assert.Equal(0, Run("scan", TestPaths.SafeApp, "--offline", "--format", "json", "--out", TestPaths.NewTempDir()));
+    }
+
+    [Fact]
+    public void Scan_VulnerableApp_Default_IsReportOnly_ExitsWith0()
+    {
+        var outDir = TestPaths.NewTempDir();
+        Assert.Equal(0, Run("scan", TestPaths.VulnerableApp, "--offline", "--format", "json", "--out", outDir));
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(outDir, "vapt-report.json")));
+        Assert.True(doc.RootElement.GetProperty("findings").GetArrayLength() > 0);
+    }
+
+    [Theory]
+    [InlineData("Critical")]
+    [InlineData("high")]
+    [InlineData("Low")]
+    public void Scan_FailBuildWithSeverity_ExitsWith1(string severity) =>
+        Assert.Equal(1, Run("scan", TestPaths.VulnerableApp, "--offline", "--fail-build", severity, "--format", "json", "--out", TestPaths.NewTempDir()));
+
+    [Fact]
+    public void Scan_FailBuildBeforePath_TreatsPathAsPositional()
+    {
+        // "--fail-build <path>": the path is not a severity, so it must not be swallowed as the option's value.
+        Assert.Equal(1, Run("scan", "--fail-build", TestPaths.VulnerableApp, "--offline", "--format", "json", "--out", TestPaths.NewTempDir()));
+        Assert.Equal(0, Run("scan", "--fail-build", TestPaths.SafeApp, "--offline", "--format", "json", "--out", TestPaths.NewTempDir()));
+    }
+
+    [Fact]
+    public void Scan_FailBuildEqualsSyntax_Works() =>
+        Assert.Equal(1, Run("scan", TestPaths.VulnerableApp, "--offline", "--fail-build=Medium", "--format", "json", "--out", TestPaths.NewTempDir()));
+
+    [Fact]
+    public void Scan_FailOnAlias_StillWorks() =>
+        Assert.Equal(1, Run("scan", TestPaths.VulnerableApp, "--offline", "--fail-on", "High", "--format", "json", "--out", TestPaths.NewTempDir()));
+
+    [Fact]
+    public void Scan_ConfigFailOnHigh_ExitsWith1()
+    {
+        var project = TestPaths.NewTempDir();
+        foreach (var file in Directory.EnumerateFiles(TestPaths.VulnerableApp, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(TestPaths.VulnerableApp, file);
+            if (rel.Split(Path.DirectorySeparatorChar).Any(p => p is "bin" or "obj")) continue;
+            var dest = Path.Combine(project, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(file, dest);
+        }
+        File.WriteAllText(Path.Combine(project, ".vaptconfig.json"), """{ "failOn": "High" }""");
+
+        Assert.Equal(1, Run("scan", project, "--offline", "--format", "json", "--out", TestPaths.NewTempDir()));
+        // An explicit --fail-on on the command line still overrides the config file.
+        Assert.Equal(0, Run("scan", project, "--offline", "--fail-on", "None", "--format", "json", "--out", TestPaths.NewTempDir()));
+    }
+
+    [Fact]
+    public void Scan_Graph_WritesSelfContainedHtml5AtGivenPath()
+    {
+        var graph = Path.Combine(TestPaths.NewTempDir(), "nested", "deeper", "security-graph.html");
+        Assert.Equal(0, Run("scan", TestPaths.VulnerableApp, "--offline", "--format", "console", "--graph", graph));
+
+        Assert.True(File.Exists(graph));
+        var html = File.ReadAllText(graph);
+        Assert.StartsWith("<!doctype html>", html.TrimStart(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<svg", html);
+        Assert.DoesNotMatch(@"<(script|link)[^>]+(src|href)\s*=\s*[""']https?://", html);
+    }
+
+    [Fact]
+    public void Scan_GraphToExistingFolder_WritesDefaultFileName()
+    {
+        var dir = TestPaths.NewTempDir();
+        Assert.Equal(0, Run("scan", TestPaths.SafeApp, "--offline", "--format", "console", "--graph", dir));
+        Assert.True(File.Exists(Path.Combine(dir, "vapt-graph.html")));
     }
 
     [Fact]
