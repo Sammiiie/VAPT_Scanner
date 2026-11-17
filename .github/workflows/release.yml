@@ -1,5 +1,7 @@
 # Publishes the vapt dotnet tool to nuget.org when a version tag (e.g. v1.0.0) is pushed.
-# Requires the repository secret NUGET_API_KEY (nuget.org key with Push scope for VaptScanner).
+# Uses nuget.org Trusted Publishing (GitHub OIDC) - no long-lived API key is stored.
+# Requires: a Trusted Publishing policy on nuget.org for Sammiiie/VAPT_Scanner + release.yml,
+# and the repository secret NUGET_USER (your nuget.org profile name, not email).
 name: Release
 
 on:
@@ -8,6 +10,7 @@ on:
 
 permissions:
   contents: write   # create the GitHub Release
+  id-token: write   # request the OIDC token for NuGet trusted publishing
 
 jobs:
   publish:
@@ -31,8 +34,14 @@ jobs:
           ./t/vapt rules > /dev/null
           ./t/vapt scan samples/SafeApp --no-deps --format console
 
+      - name: NuGet login (OIDC)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to nuget.org
-        run: dotnet nuget push "nupkg/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push "nupkg/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
