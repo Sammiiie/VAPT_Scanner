@@ -41,7 +41,7 @@ public sealed class ScanOptions
     public List<string> Exclude { get; } = new();
     public HashSet<string> DisabledRules { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, Severity> SeverityOverrides { get; } = new(StringComparer.OrdinalIgnoreCase);
-    public Severity FailOn { get; set; } = Severity.High;
+    public Severity FailOn { get; set; } = SeverityExtensions.Never;
     public Severity MinSeverity { get; set; } = Severity.Low;
     public bool SkipDependencyAudit { get; set; }
     public bool OfflineDependencyAudit { get; set; }

@@ -52,7 +52,7 @@ public static class Program
         opt.Exclude.AddRange(a.All("--exclude"));
         foreach (var r in cfg.DisabledRules.Concat(a.All("--disable"))) opt.DisabledRules.Add(r);
         foreach (var (k, v) in cfg.SeverityOverrides) opt.SeverityOverrides[k] = v;
-        opt.FailOn = ParseSeverity(a.Value("--fail-on") ?? cfg.FailOn, Severity.High);
+        opt.FailOn = ResolveFailOn(a, cfg.FailOn);
         opt.MinSeverity = ParseSeverity(a.Value("--min-severity") ?? cfg.MinSeverity, Severity.Low);
         opt.SkipDependencyAudit = a.Flag("--no-deps") || cfg.SkipDependencyAudit;
         opt.OfflineDependencyAudit = a.Flag("--offline");
@@ -63,7 +63,7 @@ public static class Program
         var result = new Scanner(opt).Run(p => Status(p));
         result.Notes.InsertRange(0, notes);
 
-        return Output(result, formats, a.Value("--out") ?? "vapt-reports", "vapt-report", opt.FailOn, a.Flag("--verbose") || a.Flag("-v"));
+        return Output(result, formats, a.Value("--out") ?? "vapt-reports", "vapt-report", opt.FailOn, a.Flag("--verbose") || a.Flag("-v"), a.Value("--graph"));
     }
 
     // ─────────────────────────────── dast ───────────────────────────────
@@ -97,14 +97,14 @@ Re-run with --authorized to confirm you are authorised to test this target.
         if (int.TryParse(a.Value("--timeout"), out var timeout)) opt.Timeout = TimeSpan.FromSeconds(timeout);
         opt.ExtraPaths.AddRange(a.All("--path"));
 
-        var failOn = ParseSeverity(a.Value("--fail-on"), Severity.High);
+        var failOn = ResolveFailOn(a, null);
         var minSev = ParseSeverity(a.Value("--min-severity"), Severity.Low);
         Banner($"Dynamic baseline scan · {uri}");
 
         using var scanner = new WebScanner(opt);
         var result = await scanner.RunAsync(p => Status(p));
         result.Findings.RemoveAll(f => f.Severity < minSev);
-        return Output(result, Formats(a), a.Value("--out") ?? "vapt-reports", "vapt-dast-report", failOn, a.Flag("--verbose") || a.Flag("-v"));
+        return Output(result, Formats(a), a.Value("--out") ?? "vapt-reports", "vapt-dast-report", failOn, a.Flag("--verbose") || a.Flag("-v"), a.Value("--graph"));
     }
 
     // ─────────────────────────────── baseline / rules / init ───────────────────────────────
@@ -164,8 +164,9 @@ Re-run with --authorized to confirm you are authorised to test this target.
   "severityOverrides": {
     // "VAPT-WEB-022": "Low"
   },
-  // Pipeline fails when a finding is at or above this severity: Critical | High | Medium | Low | None
-  "failOn": "High",
+  // Fail the pipeline when a finding is at or above this severity: Critical | High | Medium | Low | None.
+  // "None" = report only (the default). Set to "High" to fail the build, same as --fail-build.
+  "failOn": "None",
   // Findings below this severity are not reported
   "minSeverity": "Low",
   "skipDependencyAudit": false
@@ -177,7 +178,7 @@ Re-run with --authorized to confirm you are authorised to test this target.
 
     // ─────────────────────────────── output ───────────────────────────────
 
-    private static int Output(ScanResult result, HashSet<string> formats, string outDir, string baseName, Severity failOn, bool verbose)
+    private static int Output(ScanResult result, HashSet<string> formats, string outDir, string baseName, Severity failOn, bool verbose, string? graphPath = null)
     {
         if (formats.Contains("console")) ConsoleReporter.Write(result, failOn, verbose);
 
@@ -186,9 +187,33 @@ Re-run with --authorized to confirm you are authorised to test this target.
         if (formats.Contains("html")) written.Add(WriteFile(outDir, $"{baseName}.html", HtmlReporter.Render(result, failOn)));
         if (formats.Contains("json")) written.Add(WriteFile(outDir, $"{baseName}.json", JsonReporter.Render(result)));
         if (formats.Contains("sarif")) written.Add(WriteFile(outDir, $"{baseName}.sarif", SarifReporter.Render(result)));
+        if (!string.IsNullOrWhiteSpace(graphPath)) written.Add(WriteGraph(graphPath, $"{baseName.Replace("-report", "")}-graph.html", GraphReporter.Render(result, failOn)));
         foreach (var w in written) Console.WriteLine($"  report: {w}");
 
         return result.Findings.Any(f => f.Severity >= failOn) ? ExitGateFailed : ExitOk;
+    }
+
+    /// <summary>
+    /// Writes the graph report to exactly the path the user gave. An existing directory gets <paramref name="defaultName"/>
+    /// inside it; any missing parent folders are created.
+    /// </summary>
+    private static string WriteGraph(string path, string defaultName, string content)
+    {
+        var full = Path.GetFullPath(path);
+        if (Directory.Exists(full)) full = Path.Combine(full, defaultName);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content, new UTF8Encoding(false));
+        return full;
+    }
+
+    /// <summary>
+    /// Report-only unless the user opts in. Precedence: --fail-build [sev] (High when no severity is given),
+    /// then its alias --fail-on &lt;sev&gt;, then "failOn" in .vaptconfig.json, otherwise never fail.
+    /// </summary>
+    private static Severity ResolveFailOn(Args a, string? configFailOn)
+    {
+        if (a.Flag("--fail-build")) return ParseSeverity(a.Value("--fail-build"), Severity.High);
+        return ParseSeverity(a.Value("--fail-on") ?? configFailOn, SeverityExtensions.Never);
     }
 
     private static string WriteFile(string dir, string name, string content)
@@ -243,14 +268,17 @@ USAGE
   vapt scan [path]            Static scan: code (SAST), secrets, config, NuGet vulnerabilities
   vapt dast <url> --authorized
                               Safe baseline scan of a running deployment you own (staging/UAT)
-  vapt baseline [path]        Record current findings so CI only fails on NEW ones
+  vapt baseline [path]        Record current findings so a --fail-build gate only fails on NEW ones
   vapt init [path]            Create a .vaptconfig.json with sensible defaults
   vapt rules [--format md]    List all rules
 
 COMMON OPTIONS
   --format <list>             console, html, json, sarif or all   (default: console,html)
   --out <dir>                 Report folder                        (default: ./vapt-reports)
-  --fail-on <severity>        Exit code 1 if any finding >= this   (default: High; 'None' to never fail)
+  --fail-build [severity]     Fail the build (exit code 1) if any finding >= severity
+                              (severity defaults to High). Without it, vapt only reports
+  --fail-on <severity>        Alias of --fail-build <severity>
+  --graph <file>              Also write an HTML5 chart report to this file (or folder)
   --min-severity <severity>   Hide findings below this             (default: Low)
   -v, --verbose               Show explanation and fix for every finding in the console
 
@@ -271,7 +299,12 @@ SUPPRESSING A FINDING
   Add a comment on the line or the line above:   // vapt-ignore VAPT-SQL-005: table name is from an enum
 
 EXIT CODES
-  0 = passed   1 = findings at/above --fail-on   2 = usage or runtime error
+  0 = passed or report only   1 = findings at/above --fail-build   2 = usage or runtime error
+
+EXAMPLES
+  vapt scan .                                  Report only, never fails the build
+  vapt scan . --fail-build                     Fail on High or Critical findings
+  vapt scan . --fail-build Medium --graph reports/security-graph.html
 """);
 }
 
@@ -280,6 +313,9 @@ internal sealed class Args
 {
     private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase)
     { "--no-deps", "--offline", "--verbose", "-v", "--authorized", "--force" };
+
+    /// <summary>Options whose value is optional: the next argument is only taken when it is a severity name.</summary>
+    private static readonly HashSet<string> OptionalSeverity = new(StringComparer.OrdinalIgnoreCase) { "--fail-build" };
 
     private readonly List<(string key, string? value)> _named = new();
     public List<string> Positional { get; } = new();
@@ -294,6 +330,13 @@ internal sealed class Args
                 var eq = arg.IndexOf('=');
                 if (eq > 0) { _named.Add((arg[..eq], arg[(eq + 1)..])); continue; }
                 if (Flags.Contains(arg)) { _named.Add((arg, null)); continue; }
+                if (OptionalSeverity.Contains(arg))
+                {
+                    var next = i + 1 < args.Length ? args[i + 1] : null;
+                    var takesValue = next is not null && !next.StartsWith("-") && SeverityExtensions.TryParse(next, out _);
+                    _named.Add((arg, takesValue ? args[++i] : null));
+                    continue;
+                }
                 if (i + 1 >= args.Length) throw new ArgumentException($"Missing value for {arg}");
                 _named.Add((arg, args[++i]));
             }

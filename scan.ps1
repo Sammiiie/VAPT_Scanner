@@ -5,13 +5,15 @@
 .EXAMPLE
   .\scan.ps1 -Path "C:\Source\MyShop"
   .\scan.ps1 -Path "C:\Source\MyShop" -FailOn Medium -Open
+  .\scan.ps1 -Path "C:\Source\MyShop" -Graph "C:\Reports\security-graph.html"
   .\scan.ps1 -Url "https://staging.myshop.com" -Authorized
 #>
 param(
     [string]$Path = ".",
     [string]$Url,
     [switch]$Authorized,
-    [ValidateSet("Critical","High","Medium","Low","None")][string]$FailOn = "High",
+    [ValidateSet("Critical","High","Medium","Low","None")][string]$FailOn = "None",   # None = report only; any other value fails on findings at/above it
+    [string]$Graph,
     [switch]$Open
 )
 
@@ -30,10 +32,13 @@ $reports = Join-Path (Get-Location) "vapt-reports"
 if ($Url) {
     $cliArgs = @("dast", $Url, "--format", "console,html,json,sarif", "--out", $reports, "--fail-on", $FailOn)
     if ($Authorized) { $cliArgs += "--authorized" }
+    if ($Graph) { $cliArgs += @("--graph", $Graph) }
     dotnet $exe @cliArgs
     $report = Join-Path $reports "vapt-dast-report.html"
 } else {
-    dotnet $exe scan $Path --format "console,html,json,sarif" --out $reports --fail-on $FailOn
+    $cliArgs = @("scan", $Path, "--format", "console,html,json,sarif", "--out", $reports, "--fail-on", $FailOn)
+    if ($Graph) { $cliArgs += @("--graph", $Graph) }
+    dotnet $exe @cliArgs
     $report = Join-Path $reports "vapt-report.html"
 }
 $code = $LASTEXITCODE

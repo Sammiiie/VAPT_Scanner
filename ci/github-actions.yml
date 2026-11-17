@@ -1,5 +1,6 @@
 # Copy to .github/workflows/security.yml in your application repository.
-# Fails the build on High/Critical findings and publishes results to GitHub code scanning.
+# Fails the build on High/Critical findings (--fail-build) and publishes results to GitHub code scanning.
+# Remove --fail-build to only report findings without blocking the pipeline.
 name: Security scan
 
 on:
@@ -26,11 +27,11 @@ jobs:
         run: dotnet tool install --global VaptScanner
 
       - name: Static scan (SAST + secrets + config + NuGet audit)
-        run: vapt scan . --format console,sarif,html --out vapt-reports --fail-on High
+        run: vapt scan . --format console,sarif,html --out vapt-reports --fail-build High --graph vapt-reports/vapt-graph.html
 
       # Option B: the scanner source lives in your repo (e.g. tools/VAPT_Scanner) — replace the two steps above with:
       # - run: dotnet build tools/VAPT_Scanner/src/VaptScanner -c Release -o ./.vapt
-      # - run: dotnet ./.vapt/vapt.dll scan . --format console,sarif,html --out vapt-reports --fail-on High --exclude "tools/VAPT_Scanner/**"
+      # - run: dotnet ./.vapt/vapt.dll scan . --format console,sarif,html --out vapt-reports --fail-build High --exclude "tools/VAPT_Scanner/**"
 
       - name: Upload SARIF to code scanning
         if: always()
@@ -54,4 +55,4 @@ jobs:
   #     - uses: actions/setup-dotnet@v4
   #       with: { dotnet-version: '8.0.x' }
   #     - run: dotnet tool install --global VaptScanner
-  #     - run: vapt dast "${{ vars.STAGING_URL }}" --authorized --format console,html,sarif --fail-on High
+  #     - run: vapt dast "${{ vars.STAGING_URL }}" --authorized --format console,html,sarif --fail-build High

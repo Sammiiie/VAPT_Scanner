@@ -22,7 +22,7 @@ steps:
       $(Agent.TempDirectory)/vapt/vapt scan $(Build.SourcesDirectory)
       --format console,sarif,html
       --out $(Build.ArtifactStagingDirectory)/CodeAnalysisLogs
-      --fail-on High
+      --fail-build High
     displayName: Security scan (release gate)
 
   - task: PublishBuildArtifacts@1

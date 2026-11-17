@@ -4,14 +4,21 @@ using VaptScanner.Core;
 
 namespace VaptScanner.Reporting;
 
+/// <summary>Colour tokens shared by every HTML report so they look like one product, in light and dark mode.</summary>
+internal static class ReportTheme
+{
+    public const string Tokens = """
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1b;--muted:#6b6a66;--line:#e4e2dc;--crit:#8b1e5b;--high:#c0392b;--med:#b7791f;--low:#2b6cb0;--info:#6b6a66;--ok:#2f7d4f;--code:#f1efe9}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1e1e1c;--ink:#ecebe6;--muted:#9a9890;--line:#2f2e2b;--crit:#e06aa6;--high:#ef6b5b;--med:#e0a645;--low:#6aa7e8;--info:#9a9890;--ok:#5cbf86;--code:#262624} }
+""";
+}
+
 /// <summary>Single self-contained HTML file (no external assets) suitable for attaching to a release or CI run.</summary>
 public static class HtmlReporter
 {
     public static string Render(ScanResult r, Severity failOn)
     {
         var counts = r.CountsBySeverity();
-        int blocking = r.Findings.Count(f => f.Severity >= failOn);
-        bool gateApplies = (int)failOn <= (int)Severity.Critical;
         var sb = new StringBuilder();
 
         sb.Append($$"""
@@ -22,14 +29,14 @@ public static class HtmlReporter
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VAPT Report</title>
 <style>
-:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1b;--muted:#6b6a66;--line:#e4e2dc;--crit:#8b1e5b;--high:#c0392b;--med:#b7791f;--low:#2b6cb0;--info:#6b6a66;--ok:#2f7d4f;--code:#f1efe9}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1e1e1c;--ink:#ecebe6;--muted:#9a9890;--line:#2f2e2b;--crit:#e06aa6;--high:#ef6b5b;--med:#e0a645;--low:#6aa7e8;--info:#9a9890;--ok:#5cbf86;--code:#262624} }
+{{ReportTheme.Tokens}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
 .wrap{max-width:1100px;margin:0 auto;padding:32px 16px 64px}
 h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}.sub{color:var(--muted);font-size:13px;word-break:break-all}
 .gate{margin:20px 0;padding:14px 18px;border-radius:10px;font-weight:600;border:1px solid}
 .gate.fail{color:var(--high);border-color:var(--high);background:color-mix(in srgb,var(--high) 8%,transparent)}
 .gate.pass{color:var(--ok);border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent)}
+.gate.info{color:var(--med);border-color:var(--med);background:color-mix(in srgb,var(--med) 8%,transparent)}
 .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:18px 0}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;user-select:none}
 .tile b{display:block;font-size:26px;line-height:1.1}.tile span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
@@ -58,10 +65,7 @@ pre{background:var(--code);padding:10px 12px;border-radius:6px;overflow-x:auto;f
 <div class="sub">{{E(r.Target)}} · {{r.StartedAt:yyyy-MM-dd HH:mm}} · {{r.FilesScanned}} files · VaptScanner {{E(r.Version)}}</div>
 """);
 
-        if (gateApplies)
-            sb.Append(blocking > 0
-                ? $"<div class=\"gate fail\">Release gate failed: {blocking} finding(s) at or above {failOn}.</div>"
-                : $"<div class=\"gate pass\">Release gate passed: nothing at or above {failOn}.</div>");
+        sb.Append(GateBanner(r, failOn));
 
         sb.Append("<div class=\"tiles\">");
         foreach (var s in new[] { Severity.Critical, Severity.High, Severity.Medium, Severity.Low, Severity.Info })
@@ -122,5 +126,18 @@ pre{background:var(--code);padding:10px 12px;border-radius:6px;overflow-x:auto;f
         return sb.ToString();
     }
 
-    private static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
+    /// <summary>Gate status line shared by the HTML and graph reports.</summary>
+    internal static string GateBanner(ScanResult r, Severity failOn)
+    {
+        int blocking = r.Findings.Count(f => f.Severity >= failOn);
+        if (failOn.GateEnabled())
+            return blocking > 0
+                ? $"<div class=\"gate fail\">Release gate failed: {blocking} finding(s) at or above {failOn}.</div>"
+                : $"<div class=\"gate pass\">Release gate passed: nothing at or above {failOn}.</div>";
+        return r.Findings.Count > 0
+            ? $"<div class=\"gate info\">{r.Findings.Count} vulnerabilit{(r.Findings.Count == 1 ? "y" : "ies")} found. Report only: the build is not blocked.</div>"
+            : "<div class=\"gate pass\">No vulnerabilities found.</div>";
+    }
+
+    internal static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
 }

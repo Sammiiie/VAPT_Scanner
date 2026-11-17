@@ -16,13 +16,19 @@ public enum Severity
 
 public static class SeverityExtensions
 {
+    /// <summary>Fail threshold that no finding can reach: report only, never fail the build.</summary>
+    public const Severity Never = (Severity)99;
+
+    /// <summary>True when <paramref name="failOn"/> is a real severity, i.e. the release gate is switched on.</summary>
+    public static bool GateEnabled(this Severity failOn) => (int)failOn <= (int)Severity.Critical;
+
     public static bool TryParse(string? value, out Severity severity)
     {
         severity = Severity.High;
         if (string.IsNullOrWhiteSpace(value)) return false;
         if (value.Equals("none", StringComparison.OrdinalIgnoreCase) || value.Equals("never", StringComparison.OrdinalIgnoreCase))
         {
-            severity = (Severity)99;
+            severity = Never;
             return true;
         }
         return Enum.TryParse(value, ignoreCase: true, out severity);
